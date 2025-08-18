@@ -6,6 +6,7 @@ WORKDIR /app
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем файлы зависимостей
@@ -18,19 +19,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /app/logs /app/data
 
 # Копируем код приложения
-COPY app.py .
+COPY web_app.py .
 COPY recipes.json .
 COPY .env .
 
 # Создаем пользователя для безопасности
-RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
-USER botuser
+RUN useradd -m -u 1000 webuser && chown -R webuser:webuser /app
+USER webuser
 
 # Открываем порт
 EXPOSE 8000
 
 # Проверяем работоспособность
-RUN python3 -c "import telegram; print('Telegram library imported successfully')"
+RUN python3 -c "import flask; print('Flask library imported successfully')"
 
-# Команда запуска
-CMD ["python3", "app.py"]
+# Команда запуска (используем gunicorn для продакшена)
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "web_app:app"]

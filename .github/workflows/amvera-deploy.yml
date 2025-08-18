@@ -1,0 +1,94 @@
+name: Deploy to AMVERA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run tests
+      run: |
+        python -c "import flask; print('Flask imported successfully')"
+        python -c "import gunicorn; print('Gunicorn imported successfully')"
+        
+    - name: Deploy to AMVERA via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.AMVERA_HOST }}
+        username: ${{ secrets.AMVERA_USERNAME }}
+        key: ${{ secrets.AMVERA_SSH_KEY }}
+        port: ${{ secrets.AMVERA_PORT }}
+        script: |
+          echo "🚀 Starting deployment to AMVERA..."
+          
+          # Переходим в директорию проекта
+          cd /home/${{ secrets.AMVERA_USERNAME }}/telegram_recipe_bot
+          
+          # Останавливаем текущие контейнеры
+          echo "🛑 Stopping current containers..."
+          docker-compose down || true
+          
+          # Получаем последние изменения
+          echo "📥 Pulling latest changes..."
+          git pull origin main
+          
+          # Создаем .env файл если его нет
+          if [ ! -f .env ]; then
+            echo "📝 Creating .env file..."
+            cp env_example.txt .env
+            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
+          fi
+          
+          # Обновляем токен бота
+          echo "🔑 Updating bot token..."
+          sed -i "s/TELEGRAM_BOT_TOKEN=.*/TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}/" .env
+          
+          # Собираем и запускаем новые контейнеры
+          echo "🔨 Building and starting containers..."
+          docker-compose up --build -d
+          
+          # Ждем запуска
+          echo "⏳ Waiting for containers to start..."
+          sleep 10
+          
+          # Проверяем статус
+          echo "📊 Checking container status..."
+          docker-compose ps
+          
+          # Проверяем здоровье приложения
+          echo "🏥 Health check..."
+          if curl -f http://localhost:8000/health; then
+            echo "✅ Application is healthy!"
+          else
+            echo "❌ Health check failed!"
+            docker-compose logs
+            exit 1
+          fi
+          
+          echo "🎉 Deployment completed successfully!"
+          
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "🚀 Deployment to AMVERA completed successfully!"
+        else
+          echo "❌ Deployment to AMVERA failed!"
+        fi
