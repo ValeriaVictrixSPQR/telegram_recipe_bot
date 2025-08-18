@@ -150,7 +150,7 @@ HTML_TEMPLATE = """
                             <strong>🥘 Ингредиенты:</strong> ${recipe.ingredients}
                         </div>
                         <div class="recipe-section">
-                            <strong>📝 Приготовление:</strong> ${recipe.instructions}
+                            <strong>📝 Приготовление:</strong> ${recipe.method}
                         </div>
                     </div>
                 `;
@@ -182,7 +182,10 @@ def load_recipes():
     try:
         with open('recipes.json', 'r', encoding='utf-8') as file:
             data = json.load(file)
-            if 'recipes' in data and isinstance(data['recipes'], list):
+            # Проверяем, является ли data списком (прямая структура) или словарем с ключом 'recipes'
+            if isinstance(data, list):
+                return {"recipes": data}
+            elif 'recipes' in data and isinstance(data['recipes'], list):
                 return data
             else:
                 print("Ошибка: Неверная структура файла recipes.json")
@@ -228,7 +231,7 @@ def random_recipes():
             "message": "Рецепты не найдены. Проверьте файл recipes.json"
         })
     
-    available_recipes = [r for r in RECIPES["recipes"] if r["id"] not in USED_RECIPE_IDS]
+    available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
     
     if len(available_recipes) < 3:
         USED_RECIPE_IDS.clear()
@@ -243,7 +246,7 @@ def random_recipes():
     selected_recipes = random.sample(available_recipes, 3)
     
     for recipe in selected_recipes:
-        USED_RECIPE_IDS.add(recipe["id"])
+        USED_RECIPE_IDS.add(recipe["number"])
     
     return jsonify({
         "success": True,
