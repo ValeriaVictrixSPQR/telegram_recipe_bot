@@ -1,0 +1,18 @@
+# Пример переменных окружения для Railway
+# Добавьте эти переменные в Railway Dashboard → Variables
+
+# Токен вашего Telegram бота (получите у @BotFather)
+TELEGRAM_BOT_TOKEN=8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM
+
+# Режим отладки (опционально)
+DEBUG=false
+
+# Уровень логирования (опционально)
+LOG_LEVEL=INFO
+
+# Инструкция по добавлению в Railway:
+# 1. Перейдите в Railway Dashboard
+# 2. Выберите ваш проект
+# 3. Нажмите на вкладку "Variables"
+# 4. Добавьте каждую переменную отдельно
+# 5. Сохраните изменения

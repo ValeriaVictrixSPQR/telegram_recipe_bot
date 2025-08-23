@@ -82,7 +82,7 @@ telegram_recipe_bot/
 ```
 
 ### Переменные окружения
-- `TELEGRAM_BOT_TOKEN` - обязательная переменная
+- `TELEGRAM_BOT_TOKEN` - обязательная переменная (например: `8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM`)
 
 ### Команды бота
 - `/start` - начало работы с ботом
