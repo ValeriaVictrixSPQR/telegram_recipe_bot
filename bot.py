@@ -133,6 +133,11 @@ def main():
     # Получаем токен бота из переменных окружения (Railway автоматически предоставляет переменные)
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     
+    # Временное решение - если токен не найден в переменных окружения
+    if not token:
+        token = "8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM"
+        print("⚠️ Используется токен из кода (временное решение)")
+    
     if not token:
         print("Ошибка: Не найден токен бота TELEGRAM_BOT_TOKEN")
         print("Установите переменную окружения TELEGRAM_BOT_TOKEN в Railway")

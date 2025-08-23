@@ -52,7 +52,7 @@ telegram_recipe_bot/
 1. Перейдите на [railway.com](https://railway.com)
 2. Создайте новый проект
 3. Подключите GitHub репозиторий
-4. Добавьте переменную `8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM`
+4. Добавьте переменную `TELEGRAM_BOT_TOKEN` = `8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM`
 5. Нажмите "Deploy Now"
 
 ### 3. Проверка

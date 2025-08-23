@@ -35,8 +35,8 @@
 
 1. В проекте Railway перейдите в раздел "Variables"
 2. Добавьте переменную:
-   - **Ключ:** `8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM`
-   - **Значение:** ваш токен Telegram бота
+   - **Ключ:** `TELEGRAM_BOT_TOKEN`
+   - **Значение:** `8424689402:AAEWrilYr8sz1JVM6zSvaY3akg0nG029RcM`
 
 ### 4. Настройка деплоя
 
