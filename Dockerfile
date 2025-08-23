@@ -19,19 +19,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /app/logs /app/data
 
 # Копируем код приложения
-COPY web_app.py .
+COPY bot.py .
 COPY recipes.json .
-COPY .env .
+COPY templates/ ./templates/
 
 # Создаем пользователя для безопасности
 RUN useradd -m -u 1000 webuser && chown -R webuser:webuser /app
 USER webuser
 
-# Открываем порт
+# Открываем порт (Railway автоматически назначает порт)
 EXPOSE 8000
 
 # Проверяем работоспособность
-RUN python3 -c "import flask; print('Flask library imported successfully')"
+RUN python3 -c "import telegram; print('Telegram library imported successfully')"
 
-# Команда запуска (используем gunicorn для продакшена)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "web_app:app"]
+# Команда запуска Telegram бота
+CMD ["python3", "bot.py"]

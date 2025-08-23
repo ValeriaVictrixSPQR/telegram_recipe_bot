@@ -13,8 +13,10 @@ def load_recipes():
     try:
         with open('recipes.json', 'r', encoding='utf-8') as file:
             data = json.load(file)
-            # Проверяем структуру данных
-            if 'recipes' in data and isinstance(data['recipes'], list):
+            # Проверяем, является ли data списком (прямая структура) или словарем с ключом 'recipes'
+            if isinstance(data, list):
+                return {"recipes": data}
+            elif 'recipes' in data and isinstance(data['recipes'], list):
                 return data
             else:
                 print("Ошибка: Неверная структура файла recipes.json")
@@ -59,7 +61,7 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Получаем три случайных рецепта
-    available_recipes = [r for r in RECIPES["recipes"] if r["id"] not in USED_RECIPE_IDS]
+    available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
     
     # Если все рецепты были показаны, сбрасываем счетчик
     if len(available_recipes) < 3:
@@ -76,9 +78,9 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     selected_recipes = random.sample(available_recipes, 3)
     
-    # Добавляем ID выбранных рецептов в использованные
+    # Добавляем номер выбранных рецептов в использованные
     for recipe in selected_recipes:
-        USED_RECIPE_IDS.add(recipe["id"])
+        USED_RECIPE_IDS.add(recipe["number"])
     
     # Формируем сообщение с рецептами
     message = "🍽️ Вот три рецепта для вас:\n\n"
@@ -96,7 +98,7 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ingredients_text = str(ingredients)
         
         message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
-        message += f"📝 <b>Приготовление:</b> {recipe.get('instructions', 'Инструкция не указана')}\n\n"
+        message += f"📝 <b>Приготовление:</b> {recipe.get('method', 'Инструкция не указана')}\n\n"
     
     # Кнопка для получения других рецептов
     keyboard = [
@@ -128,11 +130,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Основная функция запуска бота"""
-    # Получаем токен бота из переменных окружения
+    # Получаем токен бота из переменных окружения (Railway автоматически предоставляет переменные)
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     
     if not token:
-        print("Ошибка: Не найден токен бота. Создайте файл .env с переменной TELEGRAM_BOT_TOKEN")
+        print("Ошибка: Не найден токен бота TELEGRAM_BOT_TOKEN")
+        print("Установите переменную окружения TELEGRAM_BOT_TOKEN в Railway")
         return
     
     # Проверяем, загрузились ли рецепты
@@ -140,7 +143,8 @@ def main():
         print("Ошибка: Рецепты не загружены. Проверьте файл recipes.json")
         return
     
-    print(f"Загружено {len(RECIPES['recipes'])} рецептов")
+    print(f"✅ Загружено {len(RECIPES['recipes'])} рецептов")
+    print(f"🤖 Бот запускается с токеном: {token[:10]}...")
     
     # Создаем приложение
     application = Application.builder().token(token).build()
@@ -149,15 +153,16 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    # Запускаем бота (исправленная версия для новых версий библиотеки)
-    print("Бот запущен...")
+    # Запускаем бота
+    print("🚀 Бот запущен и готов к работе!")
     try:
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     except AttributeError:
         # Альтернативный способ запуска для новых версий
         application.run_polling()
     except Exception as e:
-        print(f"Ошибка при запуске бота: {e}")
+        print(f"❌ Ошибка при запуске бота: {e}")
+        raise e
 
 if __name__ == '__main__':
     main()
