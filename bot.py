@@ -280,9 +280,6 @@ async def add_to_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_user_data(user_id, user_data)
         print(f"DEBUG: Рецепт {recipe_id} добавлен в избранное. Новый список: {user_data['favorites']}")
         await query.answer("✅ Рецепт добавлен в избранное!")
-        
-        # Показываем обновленное избранное
-        await show_favorites(update, context)
     else:
         print(f"DEBUG: Рецепт {recipe_id} уже в избранном")
         await query.answer("⚠️ Рецепт уже в избранном!")
@@ -305,7 +302,13 @@ async def remove_from_favorites(update: Update, context: ContextTypes.DEFAULT_TY
         save_user_data(user_id, user_data)
         print(f"DEBUG: Рецепт {recipe_id} удален из избранного. Новый список: {user_data['favorites']}")
         await query.answer("🗑️ Рецепт удален из избранного!")
-        await show_favorites(update, context)
+        
+        # Если избранное пустое, возвращаемся в главное меню
+        if not user_data['favorites']:
+            await main_menu(update, context)
+        else:
+            # Показываем обновленное избранное
+            await show_favorites(update, context)
     else:
         print(f"DEBUG: Рецепт {recipe_id} не найден в избранном")
         await query.answer("⚠️ Рецепт не найден в избранном!")
