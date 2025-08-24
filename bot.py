@@ -124,6 +124,9 @@ async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = get_user_data(user_id)
     favorites = user_data['favorites']
     
+    print(f"DEBUG: Показ избранного для пользователя {user_id}")
+    print(f"DEBUG: Избранные рецепты: {favorites}")
+    
     if not favorites:
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -268,11 +271,16 @@ async def add_to_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_data = get_user_data(user_id)
     
+    print(f"DEBUG: Попытка добавить рецепт {recipe_id} в избранное для пользователя {user_id}")
+    print(f"DEBUG: Текущие избранные: {user_data['favorites']}")
+    
     if recipe_id not in user_data['favorites']:
         user_data['favorites'].append(recipe_id)
         save_user_data(user_id, user_data)
+        print(f"DEBUG: Рецепт {recipe_id} добавлен в избранное. Новый список: {user_data['favorites']}")
         await query.answer("✅ Рецепт добавлен в избранное!")
     else:
+        print(f"DEBUG: Рецепт {recipe_id} уже в избранном")
         await query.answer("⚠️ Рецепт уже в избранном!")
 
 async def remove_from_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
