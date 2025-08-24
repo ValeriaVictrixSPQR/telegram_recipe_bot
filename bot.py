@@ -206,6 +206,8 @@ async def show_random_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     
+    user_id = query.from_user.id
+    
     # Получаем три случайных рецепта
     available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
     
@@ -338,6 +340,112 @@ async def rate_recipe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer(f"Спасибо за оценку! {user_data['ratings'][recipe_id]}")
 
+async def navigate_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Навигация между рецептами"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    current_recipes = context.user_data.get('current_recipes', [])
+    
+    if not current_recipes:
+        await query.answer("❌ Нет доступных рецептов")
+        return
+    
+    # Извлекаем текущий индекс из callback_data
+    parts = query.data.split('_')
+    direction = parts[0]  # 'prev' или 'next'
+    current_index = int(parts[1])
+    
+    if direction == "prev":
+        new_index = (current_index - 1) % len(current_recipes)
+    else:  # next
+        new_index = (current_index + 1) % len(current_recipes)
+    
+    recipe = current_recipes[new_index]
+    message = format_recipe_message(recipe, new_index + 1, len(current_recipes), user_id)
+    
+    # Кнопки навигации
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data=f"prev_{new_index}"),
+            InlineKeyboardButton(f"{new_index + 1}/{len(current_recipes)}", callback_data="info"),
+            InlineKeyboardButton("➡️", callback_data=f"next_{new_index}")
+        ],
+        [InlineKeyboardButton("⭐ В избранное", callback_data=f"add_fav_{recipe['number']}")],
+        [
+            InlineKeyboardButton("👍", callback_data=f"rate_recipe_{recipe['number']}_like"),
+            InlineKeyboardButton("👎", callback_data=f"rate_recipe_{recipe['number']}_dislike")
+        ],
+        [InlineKeyboardButton("🎲 Другие рецепты", callback_data="show_recipes")],
+        [InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text=message,
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
+async def navigate_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Навигация по избранным рецептам"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    favorites = user_data['favorites']
+    
+    if not favorites:
+        await query.answer("❌ Нет избранных рецептов")
+        return
+    
+    # Извлекаем текущий индекс из callback_data
+    parts = query.data.split('_')
+    direction = parts[1]  # 'prev' или 'next'
+    current_index = int(parts[2])
+    
+    if direction == "prev":
+        new_index = (current_index - 1) % len(favorites)
+    else:  # next
+        new_index = (current_index + 1) % len(favorites)
+    
+    recipe_id = favorites[new_index]
+    recipe = next((r for r in RECIPES["recipes"] if r["number"] == recipe_id), None)
+    
+    if not recipe:
+        # Если рецепт не найден, удаляем его из избранного
+        favorites.remove(recipe_id)
+        save_user_data(user_id, user_data)
+        await query.answer("🗑️ Рецепт удален из избранного (не найден)")
+        await show_favorites(update, context)
+        return
+    
+    message = format_recipe_message(recipe, new_index + 1, len(favorites), user_id)
+    
+    # Кнопки навигации по избранному
+    keyboard = []
+    if len(favorites) > 1:
+        keyboard.append([
+            InlineKeyboardButton("⬅️", callback_data=f"fav_prev_{new_index}"),
+            InlineKeyboardButton(f"{new_index + 1}/{len(favorites)}", callback_data="fav_info"),
+            InlineKeyboardButton("➡️", callback_data=f"fav_next_{new_index}")
+        ])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🗑️ Удалить из избранного", callback_data=f"remove_fav_{recipe_id}")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text=message,
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
 async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возвращает в главное меню"""
     query = update.callback_query
@@ -379,6 +487,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await remove_from_favorites(update, context)
     elif query.data.startswith("rate_recipe_"):
         await rate_recipe(update, context)
+    elif query.data.startswith("prev_") or query.data.startswith("next_"):
+        await navigate_recipes(update, context)
+    elif query.data.startswith("fav_prev_") or query.data.startswith("fav_next_"):
+        await navigate_favorites(update, context)
     # Добавьте другие обработчики по мере необходимости
 
 def main():
