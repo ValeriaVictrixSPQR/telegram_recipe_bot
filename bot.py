@@ -174,15 +174,26 @@ def extract_cooking_time(recipe):
         r'(\d+)\s*м',      # "25 м"
         r'(\d+)\s*минуты', # "25 минуты"
         r'(\d+)\s*минуту', # "25 минуту"
+        r'(\d+)\s*минут\b', # "25 минут" (с границей слова)
+        r'(\d+)\s*мин\b',   # "25 мин" (с границей слова)
     ]
     
     max_time = 0
+    found_times = []
+    
     for pattern in patterns:
         matches = re.findall(pattern, method)
         for match in matches:
             time_value = int(match)
+            found_times.append(time_value)
             if time_value > max_time:
                 max_time = time_value
+    
+    # Отладочная информация
+    if found_times:
+        print(f"DEBUG: Рецепт '{recipe.get('name', 'Unknown')}' - найдено время: {found_times}, максимальное: {max_time}")
+    else:
+        print(f"DEBUG: Рецепт '{recipe.get('name', 'Unknown')}' - время не найдено")
     
     return max_time
 
@@ -191,11 +202,36 @@ def filter_recipes_by_cooking_time(recipes, max_minutes):
     if not max_minutes:
         return recipes
     
+    print(f"DEBUG: Фильтрация рецептов по времени готовки (максимум {max_minutes} минут)")
+    print(f"DEBUG: Всего рецептов для фильтрации: {len(recipes)}")
+    
     filtered_recipes = []
+    excluded_recipes = []
+    no_time_recipes = []
+    
     for recipe in recipes:
         cooking_time = extract_cooking_time(recipe)
-        if cooking_time <= max_minutes:
+        if cooking_time == 0:
+            # Если время не найдено, исключаем рецепт
+            no_time_recipes.append(recipe.get('name', 'Unknown'))
+        elif cooking_time <= max_minutes:
             filtered_recipes.append(recipe)
+        else:
+            excluded_recipes.append((recipe.get('name', 'Unknown'), cooking_time))
+    
+    print(f"DEBUG: Прошло фильтр: {len(filtered_recipes)} рецептов")
+    print(f"DEBUG: Исключено по времени: {len(excluded_recipes)} рецептов")
+    print(f"DEBUG: Исключено (время не указано): {len(no_time_recipes)} рецептов")
+    
+    if excluded_recipes:
+        print("DEBUG: Исключенные рецепты (превышают время):")
+        for name, time in excluded_recipes[:5]:  # Показываем первые 5
+            print(f"  - {name}: {time} минут")
+    
+    if no_time_recipes:
+        print("DEBUG: Рецепты без указания времени:")
+        for name in no_time_recipes[:5]:  # Показываем первые 5
+            print(f"  - {name}")
     
     return filtered_recipes
 
@@ -318,6 +354,12 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     selected_recipes = random.sample(available_recipes, 3)
+    
+    # Отладочная информация о выбранных рецептах
+    print(f"DEBUG: Выбрано рецептов: {len(selected_recipes)}")
+    for i, recipe in enumerate(selected_recipes):
+        cooking_time = extract_cooking_time(recipe)
+        print(f"DEBUG: Рецепт {i+1}: '{recipe.get('name', 'Unknown')}' - время готовки: {cooking_time} минут")
     
     # Добавляем номер выбранных рецептов в использованные
     for recipe in selected_recipes:
