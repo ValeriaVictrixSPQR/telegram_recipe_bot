@@ -48,8 +48,7 @@ def get_user_data(user_id):
                 'allergies': [],
                 'cooking_time': None,
                 'difficulty': None
-            },
-            'ratings': {}
+            }
         }
     return USER_DATA[user_id]
 
@@ -222,10 +221,6 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("➡️", callback_data="next_0")
         ],
         [InlineKeyboardButton("⭐ В избранное", callback_data=f"add_fav_{recipe['number']}")],
-        [
-            InlineKeyboardButton("👍", callback_data=f"rate_recipe_{recipe['number']}_like"),
-            InlineKeyboardButton("👎", callback_data=f"rate_recipe_{recipe['number']}_dislike")
-        ],
         [InlineKeyboardButton("🎲 Другие рецепты", callback_data="show_recipes")],
         [InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")]
     ]
@@ -258,12 +253,7 @@ def format_recipe_message(recipe, current_index, total_count, user_id=None):
     message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
     message += f"📝 <b>Приготовление:</b> {recipe.get('method', 'Инструкция не указана')}\n\n"
     
-    # Добавляем оценку рецепта
-    if user_id:
-        user_data = get_user_data(user_id)
-        rating = user_data['ratings'].get(recipe['number'])
-        if rating:
-            message += f"⭐ Оценка: {rating}\n\n"
+
     
     return message
 
@@ -303,24 +293,7 @@ async def remove_from_favorites(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await query.answer("⚠️ Рецепт не найден в избранном!")
 
-async def rate_recipe(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Оценивает рецепт"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Извлекаем данные из callback_data: rate_recipe_123_like
-    parts = query.data.split('_')
-    recipe_id = int(parts[2])
-    rating = parts[3]  # 'like' или 'dislike'
-    
-    user_id = query.from_user.id
-    user_data = get_user_data(user_id)
-    
-    # Сохраняем оценку
-    user_data['ratings'][recipe_id] = "👍" if rating == "like" else "👎"
-    save_user_data(user_id, user_data)
-    
-    await query.answer(f"Спасибо за оценку! {user_data['ratings'][recipe_id]}")
+
 
 async def navigate_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Навигация между рецептами"""
@@ -355,10 +328,6 @@ async def navigate_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("➡️", callback_data=f"next_{new_index}")
         ],
         [InlineKeyboardButton("⭐ В избранное", callback_data=f"add_fav_{recipe['number']}")],
-        [
-            InlineKeyboardButton("👍", callback_data=f"rate_recipe_{recipe['number']}_like"),
-            InlineKeyboardButton("👎", callback_data=f"rate_recipe_{recipe['number']}_dislike")
-        ],
         [InlineKeyboardButton("🎲 Другие рецепты", callback_data="show_recipes")],
         [InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")]
     ]
@@ -465,8 +434,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await add_to_favorites(update, context)
     elif query.data.startswith("remove_fav_"):
         await remove_from_favorites(update, context)
-    elif query.data.startswith("rate_recipe_"):
-        await rate_recipe(update, context)
+
     elif query.data.startswith("prev_") or query.data.startswith("next_"):
         await navigate_recipes(update, context)
     elif query.data.startswith("fav_prev_") or query.data.startswith("fav_next_"):
