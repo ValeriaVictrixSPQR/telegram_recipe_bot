@@ -164,6 +164,7 @@ async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard.extend([
         [InlineKeyboardButton("🗑️ Удалить из избранного", callback_data=f"remove_fav_{recipe_id}")],
+        [InlineKeyboardButton("📋 Получить рецепт", callback_data="show_recipes")],
         [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
     ])
     
@@ -279,6 +280,9 @@ async def add_to_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_user_data(user_id, user_data)
         print(f"DEBUG: Рецепт {recipe_id} добавлен в избранное. Новый список: {user_data['favorites']}")
         await query.answer("✅ Рецепт добавлен в избранное!")
+        
+        # Показываем обновленное избранное
+        await show_favorites(update, context)
     else:
         print(f"DEBUG: Рецепт {recipe_id} уже в избранном")
         await query.answer("⚠️ Рецепт уже в избранном!")
@@ -293,12 +297,17 @@ async def remove_from_favorites(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = query.from_user.id
     user_data = get_user_data(user_id)
     
+    print(f"DEBUG: Попытка удалить рецепт {recipe_id} из избранного для пользователя {user_id}")
+    print(f"DEBUG: Текущие избранные: {user_data['favorites']}")
+    
     if recipe_id in user_data['favorites']:
         user_data['favorites'].remove(recipe_id)
         save_user_data(user_id, user_data)
+        print(f"DEBUG: Рецепт {recipe_id} удален из избранного. Новый список: {user_data['favorites']}")
         await query.answer("🗑️ Рецепт удален из избранного!")
         await show_favorites(update, context)
     else:
+        print(f"DEBUG: Рецепт {recipe_id} не найден в избранном")
         await query.answer("⚠️ Рецепт не найден в избранном!")
 
 
@@ -394,6 +403,7 @@ async def navigate_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     keyboard.extend([
         [InlineKeyboardButton("🗑️ Удалить из избранного", callback_data=f"remove_fav_{recipe_id}")],
+        [InlineKeyboardButton("📋 Получить рецепт", callback_data="show_recipes")],
         [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
     ])
     
@@ -447,6 +457,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await navigate_recipes(update, context)
     elif query.data.startswith("fav_prev_") or query.data.startswith("fav_next_"):
         await navigate_favorites(update, context)
+    elif query.data == "fav_info":
+        await query.answer("ℹ️ Информация о навигации по избранному")
     # Добавьте другие обработчики по мере необходимости
 
 def main():
