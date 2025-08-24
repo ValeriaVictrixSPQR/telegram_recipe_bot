@@ -160,42 +160,7 @@ async def set_cooking_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Возвращаемся к настройкам
     await show_settings(update, context)
 
-def extract_cooking_time(recipe):
-    """Извлекает время готовки из рецепта (в минутах)"""
-    method = recipe.get('method', '').lower()
-    
-    # Ищем время в минутах
-    import re
-    
-    # Паттерны для поиска времени
-    patterns = [
-        r'(\d+)\s*минут',  # "25 минут"
-        r'(\d+)\s*мин',    # "25 мин"
-        r'(\d+)\s*м',      # "25 м"
-        r'(\d+)\s*минуты', # "25 минуты"
-        r'(\d+)\s*минуту', # "25 минуту"
-        r'(\d+)\s*минут\b', # "25 минут" (с границей слова)
-        r'(\d+)\s*мин\b',   # "25 мин" (с границей слова)
-    ]
-    
-    max_time = 0
-    found_times = []
-    
-    for pattern in patterns:
-        matches = re.findall(pattern, method)
-        for match in matches:
-            time_value = int(match)
-            found_times.append(time_value)
-            if time_value > max_time:
-                max_time = time_value
-    
-    # Отладочная информация
-    if found_times:
-        print(f"DEBUG: Рецепт '{recipe.get('name', 'Unknown')}' - найдено время: {found_times}, максимальное: {max_time}")
-    else:
-        print(f"DEBUG: Рецепт '{recipe.get('name', 'Unknown')}' - время не найдено")
-    
-    return max_time
+
 
 def filter_recipes_by_cooking_time(recipes, max_minutes):
     """Фильтрует рецепты по времени готовки"""
@@ -210,9 +175,9 @@ def filter_recipes_by_cooking_time(recipes, max_minutes):
     no_time_recipes = []
     
     for recipe in recipes:
-        cooking_time = extract_cooking_time(recipe)
+        cooking_time = recipe.get('cooking_time', 0)
         if cooking_time == 0:
-            # Если время не найдено, исключаем рецепт
+            # Если время не указано, исключаем рецепт
             no_time_recipes.append(recipe.get('name', 'Unknown'))
         elif cooking_time <= max_minutes:
             filtered_recipes.append(recipe)
@@ -358,7 +323,7 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Отладочная информация о выбранных рецептах
     print(f"DEBUG: Выбрано рецептов: {len(selected_recipes)}")
     for i, recipe in enumerate(selected_recipes):
-        cooking_time = extract_cooking_time(recipe)
+        cooking_time = recipe.get('cooking_time', 0)
         print(f"DEBUG: Рецепт {i+1}: '{recipe.get('name', 'Unknown')}' - время готовки: {cooking_time} минут")
     
     # Добавляем номер выбранных рецептов в использованные
@@ -409,7 +374,7 @@ def format_recipe_message(recipe, current_index, total_count, user_id=None):
     message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
     
     # Добавляем информацию о времени готовки
-    cooking_time = extract_cooking_time(recipe)
+    cooking_time = recipe.get('cooking_time', 0)
     if cooking_time > 0:
         message += f"⏰ <b>Время готовки:</b> ~{cooking_time} минут\n"
     
