@@ -115,6 +115,90 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML'
     )
 
+async def show_cooking_time_options(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает опции для выбора времени готовки"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("⏰ Не более 10 минут", callback_data="cooking_time_10")],
+        [InlineKeyboardButton("⏰ Не более 20 минут", callback_data="cooking_time_20")],
+        [InlineKeyboardButton("⏰ Не более 30 минут", callback_data="cooking_time_30")],
+        [InlineKeyboardButton("❌ Убрать фильтр", callback_data="cooking_time_none")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="show_settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text="⏰ <b>Время готовки</b>\n\n"
+             "Выберите максимальное время готовки:",
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
+async def set_cooking_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Устанавливает время готовки для пользователя"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    
+    # Извлекаем время из callback_data
+    time_value = query.data.split('_')[-1]
+    
+    if time_value == "none":
+        user_data['preferences']['cooking_time'] = None
+        await query.answer("✅ Фильтр времени готовки убран!")
+    else:
+        time_minutes = int(time_value)
+        user_data['preferences']['cooking_time'] = f"Не более {time_minutes} минут"
+        await query.answer(f"✅ Установлено время готовки: не более {time_minutes} минут!")
+    
+    save_user_data(user_id, user_data)
+    
+    # Возвращаемся к настройкам
+    await show_settings(update, context)
+
+def extract_cooking_time(recipe):
+    """Извлекает время готовки из рецепта (в минутах)"""
+    method = recipe.get('method', '').lower()
+    
+    # Ищем время в минутах
+    import re
+    
+    # Паттерны для поиска времени
+    patterns = [
+        r'(\d+)\s*минут',  # "25 минут"
+        r'(\d+)\s*мин',    # "25 мин"
+        r'(\d+)\s*м',      # "25 м"
+        r'(\d+)\s*минуты', # "25 минуты"
+        r'(\d+)\s*минуту', # "25 минуту"
+    ]
+    
+    max_time = 0
+    for pattern in patterns:
+        matches = re.findall(pattern, method)
+        for match in matches:
+            time_value = int(match)
+            if time_value > max_time:
+                max_time = time_value
+    
+    return max_time
+
+def filter_recipes_by_cooking_time(recipes, max_minutes):
+    """Фильтрует рецепты по времени готовки"""
+    if not max_minutes:
+        return recipes
+    
+    filtered_recipes = []
+    for recipe in recipes:
+        cooking_time = extract_cooking_time(recipe)
+        if cooking_time <= max_minutes:
+            filtered_recipes.append(recipe)
+    
+    return filtered_recipes
+
 async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает избранные рецепты пользователя"""
     query = update.callback_query
@@ -182,6 +266,7 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     user_id = query.from_user.id
+    user_data = get_user_data(user_id)
     
     # Проверяем, есть ли рецепты
     if not RECIPES["recipes"]:
@@ -191,20 +276,45 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Получаем три случайных рецепта
+    # Применяем фильтр по времени готовки
     available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
+    
+    # Получаем настройки времени готовки пользователя
+    cooking_time_pref = user_data['preferences']['cooking_time']
+    max_minutes = None
+    
+    if cooking_time_pref:
+        # Извлекаем число минут из настройки
+        import re
+        match = re.search(r'(\d+)', cooking_time_pref)
+        if match:
+            max_minutes = int(match.group(1))
+            available_recipes = filter_recipes_by_cooking_time(available_recipes, max_minutes)
+            print(f"DEBUG: Применен фильтр времени готовки: не более {max_minutes} минут")
+            print(f"DEBUG: Доступно рецептов после фильтрации: {len(available_recipes)}")
     
     # Если все рецепты были показаны, сбрасываем счетчик
     if len(available_recipes) < 3:
         USED_RECIPE_IDS.clear()
-        available_recipes = RECIPES["recipes"]
+        available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
+        # Снова применяем фильтр
+        if max_minutes:
+            available_recipes = filter_recipes_by_cooking_time(available_recipes, max_minutes)
     
     # Проверяем, что у нас достаточно рецептов
     if len(available_recipes) < 3:
-        await query.edit_message_text(
-            text="❌ Недостаточно рецептов для показа. Нужно минимум 3 рецепта.",
-            parse_mode='HTML'
-        )
+        if max_minutes:
+            await query.edit_message_text(
+                text=f"❌ Недостаточно рецептов для показа с фильтром времени готовки (не более {max_minutes} минут).\n\n"
+                     f"Найдено рецептов: {len(available_recipes)}\n"
+                     f"Попробуйте изменить фильтр в настройках или убрать его.",
+                parse_mode='HTML'
+            )
+        else:
+            await query.edit_message_text(
+                text="❌ Недостаточно рецептов для показа. Нужно минимум 3 рецепта.",
+                parse_mode='HTML'
+            )
         return
     
     selected_recipes = random.sample(available_recipes, 3)
@@ -255,6 +365,12 @@ def format_recipe_message(recipe, current_index, total_count, user_id=None):
         ingredients_text = str(ingredients)
     
     message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
+    
+    # Добавляем информацию о времени готовки
+    cooking_time = extract_cooking_time(recipe)
+    if cooking_time > 0:
+        message += f"⏰ <b>Время готовки:</b> ~{cooking_time} минут\n"
+    
     message += f"📝 <b>Приготовление:</b> {recipe.get('method', 'Инструкция не указана')}\n\n"
     
 
@@ -462,6 +578,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await navigate_favorites(update, context)
     elif query.data == "fav_info":
         await query.answer("ℹ️ Информация о навигации по избранному")
+    elif query.data == "set_cooking_time":
+        await show_cooking_time_options(update, context)
+    elif query.data.startswith("cooking_time_"):
+        await set_cooking_time(update, context)
     # Добавьте другие обработчики по мере необходимости
 
 def main():
