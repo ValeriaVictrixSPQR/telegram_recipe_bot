@@ -31,24 +31,150 @@ def load_recipes():
         print(f"Неожиданная ошибка при загрузке рецептов: {e}")
         return {"recipes": []}
 
-# Глобальная переменная для хранения рецептов
+# Глобальные переменные
 RECIPES = load_recipes()
 USED_RECIPE_IDS = set()
 
+# Хранилище пользовательских данных (в реальном проекте лучше использовать базу данных)
+USER_DATA = {}
+
+def get_user_data(user_id):
+    """Получает данные пользователя"""
+    if user_id not in USER_DATA:
+        USER_DATA[user_id] = {
+            'favorites': [],
+            'preferences': {
+                'age': None,
+                'allergies': [],
+                'cooking_time': None,
+                'difficulty': None
+            },
+            'ratings': {}
+        }
+    return USER_DATA[user_id]
+
+def save_user_data(user_id, data):
+    """Сохраняет данные пользователя"""
+    USER_DATA[user_id] = data
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
+    """Обработчик команды /start - главное меню"""
     keyboard = [
-        [InlineKeyboardButton("Рецепты", callback_data="show_recipes")]
+        [InlineKeyboardButton("📋 Получить рецепт", callback_data="show_recipes")],
+        [InlineKeyboardButton("⭐ Избранное", callback_data="show_favorites")],
+        [InlineKeyboardButton("⚙️ Настройки", callback_data="show_settings")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "Привет! Я бот с рецептами. Нажми на кнопку 'Рецепты' чтобы получить три случайных рецепта!",
+        "👋 Привет! Я бот с рецептами для детей.\n\n"
+        "Выберите действие:",
         reply_markup=reply_markup
     )
 
+async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает настройки пользователя"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    prefs = user_data['preferences']
+    
+    # Формируем текст с текущими настройками
+    settings_text = "⚙️ <b>Настройки</b>\n\n"
+    
+    # Возраст
+    age_text = f"Возраст: {prefs['age']} лет" if prefs['age'] else "Возраст: не указан"
+    settings_text += f"👶 {age_text}\n"
+    
+    # Аллергии
+    allergies_text = ", ".join(prefs['allergies']) if prefs['allergies'] else "не указаны"
+    settings_text += f"⚠️ Аллергии: {allergies_text}\n"
+    
+    # Время готовки
+    time_text = prefs['cooking_time'] if prefs['cooking_time'] else "не указано"
+    settings_text += f"⏰ Время готовки: {time_text}\n"
+    
+    # Сложность
+    difficulty_text = prefs['difficulty'] if prefs['difficulty'] else "не указана"
+    settings_text += f"🎯 Сложность: {difficulty_text}\n"
+    
+    # Кнопки для изменения настроек
+    keyboard = [
+        [InlineKeyboardButton("👶 Указать возраст", callback_data="set_age")],
+        [InlineKeyboardButton("⚠️ Аллергии", callback_data="set_allergies")],
+        [InlineKeyboardButton("⏰ Время готовки", callback_data="set_cooking_time")],
+        [InlineKeyboardButton("🎯 Сложность", callback_data="set_difficulty")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text=settings_text,
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
+async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает избранные рецепты пользователя"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    favorites = user_data['favorites']
+    
+    if not favorites:
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            text="⭐ <b>Избранное</b>\n\n"
+                 "У вас пока нет избранных рецептов.\n"
+                 "Добавляйте понравившиеся рецепты в избранное!",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+        return
+    
+    # Показываем первый избранный рецепт
+    recipe_id = favorites[0]
+    recipe = next((r for r in RECIPES["recipes"] if r["number"] == recipe_id), None)
+    
+    if not recipe:
+        # Если рецепт не найден, удаляем его из избранного
+        favorites.remove(recipe_id)
+        save_user_data(user_id, user_data)
+        await show_favorites(update, context)
+        return
+    
+    message = format_recipe_message(recipe, 1, len(favorites), user_id)
+    
+    # Кнопки навигации по избранному
+    keyboard = []
+    if len(favorites) > 1:
+        keyboard.append([
+            InlineKeyboardButton("⬅️", callback_data=f"fav_prev_0"),
+            InlineKeyboardButton(f"1/{len(favorites)}", callback_data="fav_info"),
+            InlineKeyboardButton("➡️", callback_data=f"fav_next_0")
+        ])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🗑️ Удалить из избранного", callback_data=f"remove_fav_{recipe_id}")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text=message,
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
 async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает три случайных рецепта"""
+    """Показывает рецепты с фильтрами"""
     query = update.callback_query
     await query.answer()
     
@@ -59,6 +185,26 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML'
         )
         return
+    
+    # Показываем меню фильтров
+    keyboard = [
+        [InlineKeyboardButton("🎲 Случайные рецепты", callback_data="random_recipes")],
+        [InlineKeyboardButton("⏰ По времени готовки", callback_data="filter_time")],
+        [InlineKeyboardButton("🎯 По сложности", callback_data="filter_difficulty")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text="📋 <b>Выберите способ получения рецептов:</b>",
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
+async def show_random_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает три случайных рецепта"""
+    query = update.callback_query
+    await query.answer()
     
     # Получаем три случайных рецепта
     available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
@@ -82,51 +228,158 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for recipe in selected_recipes:
         USED_RECIPE_IDS.add(recipe["number"])
     
-    # Формируем сообщение с рецептами
-    message = "🍽️ Вот три рецепта для вас:\n\n"
+    # Показываем первый рецепт
+    recipe = selected_recipes[0]
+    message = format_recipe_message(recipe, 1, 3, user_id)
     
-    for i, recipe in enumerate(selected_recipes, 1):
-        message += f"📖 <b>{i}. {recipe['name']}</b>\n"
-        
-        # Обрабатываем ингредиенты (могут быть строкой или списком)
-        ingredients = recipe.get('ingredients', [])
-        if isinstance(ingredients, str):
-            ingredients_text = ingredients
-        elif isinstance(ingredients, list):
-            ingredients_text = ', '.join(ingredients)
-        else:
-            ingredients_text = str(ingredients)
-        
-        message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
-        message += f"📝 <b>Приготовление:</b> {recipe.get('method', 'Инструкция не указана')}\n\n"
-    
-    # Кнопка для получения других рецептов
+    # Кнопки навигации
     keyboard = [
-        [InlineKeyboardButton("Давай другое", callback_data="show_recipes")]
+        [
+            InlineKeyboardButton("⬅️", callback_data="prev_0"),
+            InlineKeyboardButton(f"1/3", callback_data="info"),
+            InlineKeyboardButton("➡️", callback_data="next_0")
+        ],
+        [InlineKeyboardButton("⭐ В избранное", callback_data=f"add_fav_{recipe['number']}")],
+        [
+            InlineKeyboardButton("👍", callback_data=f"rate_recipe_{recipe['number']}_like"),
+            InlineKeyboardButton("👎", callback_data=f"rate_recipe_{recipe['number']}_dislike")
+        ],
+        [InlineKeyboardButton("🎲 Другие рецепты", callback_data="show_recipes")],
+        [InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    try:
-        await query.edit_message_text(
-            text=message,
-            reply_markup=reply_markup,
-            parse_mode='HTML'
-        )
-    except Exception as e:
-        print(f"Ошибка при отправке сообщения: {e}")
-        # Если не удалось отредактировать, отправляем новое
-        await query.message.reply_text(
-            text=message,
-            reply_markup=reply_markup,
-            parse_mode='HTML'
-        )
+    # Сохраняем выбранные рецепты в контексте
+    context.user_data['current_recipes'] = selected_recipes
+    
+    await query.edit_message_text(
+        text=message,
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+
+def format_recipe_message(recipe, current_index, total_count, user_id=None):
+    """Форматирует сообщение с рецептом"""
+    message = f"📖 <b>{recipe['name']}</b>\n\n"
+    
+    # Обрабатываем ингредиенты
+    ingredients = recipe.get('ingredients', [])
+    if isinstance(ingredients, str):
+        ingredients_text = ingredients
+    elif isinstance(ingredients, list):
+        ingredients_text = ', '.join(ingredients)
+    else:
+        ingredients_text = str(ingredients)
+    
+    message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
+    message += f"📝 <b>Приготовление:</b> {recipe.get('method', 'Инструкция не указана')}\n\n"
+    
+    # Добавляем оценку рецепта
+    if user_id:
+        user_data = get_user_data(user_id)
+        rating = user_data['ratings'].get(recipe['number'])
+        if rating:
+            message += f"⭐ Оценка: {rating}\n\n"
+    
+    return message
+
+async def add_to_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавляет рецепт в избранное"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Извлекаем номер рецепта из callback_data
+    recipe_id = int(query.data.split('_')[-1])
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    
+    if recipe_id not in user_data['favorites']:
+        user_data['favorites'].append(recipe_id)
+        save_user_data(user_id, user_data)
+        await query.answer("✅ Рецепт добавлен в избранное!")
+    else:
+        await query.answer("⚠️ Рецепт уже в избранном!")
+
+async def remove_from_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удаляет рецепт из избранного"""
+    query = update.callback_query
+    await query.answer()
+    
+    recipe_id = int(query.data.split('_')[-1])
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    
+    if recipe_id in user_data['favorites']:
+        user_data['favorites'].remove(recipe_id)
+        save_user_data(user_id, user_data)
+        await query.answer("🗑️ Рецепт удален из избранного!")
+        await show_favorites(update, context)
+    else:
+        await query.answer("⚠️ Рецепт не найден в избранном!")
+
+async def rate_recipe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Оценивает рецепт"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Извлекаем данные из callback_data: rate_recipe_123_like
+    parts = query.data.split('_')
+    recipe_id = int(parts[2])
+    rating = parts[3]  # 'like' или 'dislike'
+    
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    
+    # Сохраняем оценку
+    user_data['ratings'][recipe_id] = "👍" if rating == "like" else "👎"
+    save_user_data(user_id, user_data)
+    
+    await query.answer(f"Спасибо за оценку! {user_data['ratings'][recipe_id]}")
+
+async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возвращает в главное меню"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Получить рецепт", callback_data="show_recipes")],
+        [InlineKeyboardButton("⭐ Избранное", callback_data="show_favorites")],
+        [InlineKeyboardButton("⚙️ Настройки", callback_data="show_settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        "👋 Главное меню\n\n"
+        "Выберите действие:",
+        reply_markup=reply_markup
+    )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик нажатий на кнопки"""
     query = update.callback_query
     
-    if query.data == "show_recipes":
+    # Сохраняем user_id в контексте
+    context.user_data['user_id'] = query.from_user.id
+    
+    if query.data == "main_menu":
+        await main_menu(update, context)
+    elif query.data == "show_recipes":
         await show_recipes(update, context)
+    elif query.data == "show_favorites":
+        await show_favorites(update, context)
+    elif query.data == "show_settings":
+        await show_settings(update, context)
+    elif query.data == "random_recipes":
+        await show_random_recipes(update, context)
+    elif query.data.startswith("add_fav_"):
+        await add_to_favorites(update, context)
+    elif query.data.startswith("remove_fav_"):
+        await remove_from_favorites(update, context)
+    elif query.data.startswith("rate_recipe_"):
+        await rate_recipe(update, context)
+    # Добавьте другие обработчики по мере необходимости
 
 def main():
     """Основная функция запуска бота"""
