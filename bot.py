@@ -174,9 +174,11 @@ async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает рецепты с фильтрами"""
+    """Показывает три случайных рецепта"""
     query = update.callback_query
     await query.answer()
+    
+    user_id = query.from_user.id
     
     # Проверяем, есть ли рецепты
     if not RECIPES["recipes"]:
@@ -185,28 +187,6 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML'
         )
         return
-    
-    # Показываем меню фильтров
-    keyboard = [
-        [InlineKeyboardButton("🎲 Случайные рецепты", callback_data="random_recipes")],
-        [InlineKeyboardButton("⏰ По времени готовки", callback_data="filter_time")],
-        [InlineKeyboardButton("🎯 По сложности", callback_data="filter_difficulty")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(
-        text="📋 <b>Выберите способ получения рецептов:</b>",
-        reply_markup=reply_markup,
-        parse_mode='HTML'
-    )
-
-async def show_random_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает три случайных рецепта"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
     
     # Получаем три случайных рецепта
     available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
@@ -259,6 +239,8 @@ async def show_random_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=reply_markup,
         parse_mode='HTML'
     )
+
+
 
 def format_recipe_message(recipe, current_index, total_count, user_id=None):
     """Форматирует сообщение с рецептом"""
@@ -479,8 +461,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_favorites(update, context)
     elif query.data == "show_settings":
         await show_settings(update, context)
-    elif query.data == "random_recipes":
-        await show_random_recipes(update, context)
     elif query.data.startswith("add_fav_"):
         await add_to_favorites(update, context)
     elif query.data.startswith("remove_fav_"):
