@@ -44,10 +44,8 @@ def get_user_data(user_id):
         USER_DATA[user_id] = {
             'favorites': [],
             'preferences': {
-                'age': None,
                 'allergies': [],
-                'cooking_time': None,
-                'difficulty': None
+                'cooking_time': None
             }
         }
     return USER_DATA[user_id]
@@ -83,10 +81,6 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Формируем текст с текущими настройками
     settings_text = "⚙️ <b>Настройки</b>\n\n"
     
-    # Возраст
-    age_text = f"Возраст: {prefs['age']} лет" if prefs['age'] else "Возраст: не указан"
-    settings_text += f"👶 {age_text}\n"
-    
     # Аллергии
     allergies_text = ", ".join(prefs['allergies']) if prefs['allergies'] else "не указаны"
     settings_text += f"⚠️ Аллергии: {allergies_text}\n"
@@ -95,16 +89,10 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_text = prefs['cooking_time'] if prefs['cooking_time'] else "не указано"
     settings_text += f"⏰ Время готовки: {time_text}\n"
     
-    # Сложность
-    difficulty_text = prefs['difficulty'] if prefs['difficulty'] else "не указана"
-    settings_text += f"🎯 Сложность: {difficulty_text}\n"
-    
     # Кнопки для изменения настроек
     keyboard = [
-        [InlineKeyboardButton("👶 Указать возраст", callback_data="set_age")],
         [InlineKeyboardButton("⚠️ Аллергии", callback_data="set_allergies")],
         [InlineKeyboardButton("⏰ Время готовки", callback_data="set_cooking_time")],
-        [InlineKeyboardButton("🎯 Сложность", callback_data="set_difficulty")],
         [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
