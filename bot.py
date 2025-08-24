@@ -366,7 +366,7 @@ def format_recipe_message(recipe, current_index, total_count, user_id=None):
     if cooking_time > 0:
         message += f"⏰ <b>Время готовки:</b> ~{cooking_time} минут\n"
     
-    message += f"📝 <b>Приготовление:</b> {recipe.get('method', 'Инструкция не указана')}\n\n"
+    message += f"\n📋 <b>Рецепт #{recipe.get('number', current_index)}</b> из {total_count}\n"
     
 
     
