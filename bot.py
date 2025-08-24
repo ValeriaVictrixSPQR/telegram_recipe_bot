@@ -359,17 +359,17 @@ def format_recipe_message(recipe, current_index, total_count, user_id=None):
     else:
         ingredients_text = str(ingredients)
     
-    message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n"
-    
-    # Добавляем информацию о времени готовки
-    cooking_time = recipe.get('cooking_time', 0)
-    if cooking_time > 0:
-        message += f"⏰ <b>Время готовки:</b> ~{cooking_time} минут\n"
+    message += f"🥘 <b>Ингредиенты:</b> {ingredients_text}\n\n"
     
     # Добавляем инструкцию по приготовлению
     method = recipe.get('method', '')
     if method:
-        message += f"\n📝 <b>Приготовление:</b>\n{method}\n"
+        message += f"📝 <b>Приготовление:</b>\n{method}\n\n"
+    
+    # Добавляем информацию о времени готовки в конце
+    cooking_time = recipe.get('cooking_time', 0)
+    if cooking_time > 0:
+        message += f"⏰ <b>Время готовки:</b> ~{cooking_time} минут"
     
 
     
