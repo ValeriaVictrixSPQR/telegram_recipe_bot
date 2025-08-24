@@ -169,12 +169,21 @@ def filter_recipes_by_cooking_time(recipes, max_minutes):
             no_time_recipes.append(recipe.get('name', 'Unknown'))
         elif cooking_time <= max_minutes:
             filtered_recipes.append(recipe)
+            # Дополнительная проверка
+            if cooking_time > max_minutes:
+                print(f"ERROR: Рецепт '{recipe.get('name', 'Unknown')}' прошел фильтр, но время {cooking_time} > {max_minutes}")
         else:
             excluded_recipes.append((recipe.get('name', 'Unknown'), cooking_time))
     
     print(f"DEBUG: Прошло фильтр: {len(filtered_recipes)} рецептов")
     print(f"DEBUG: Исключено по времени: {len(excluded_recipes)} рецептов")
     print(f"DEBUG: Исключено (время не указано): {len(no_time_recipes)} рецептов")
+    
+    # Финальная проверка всех отфильтрованных рецептов
+    for recipe in filtered_recipes:
+        cooking_time = recipe.get('cooking_time', 0)
+        if cooking_time > max_minutes:
+            print(f"ERROR: В отфильтрованных рецептах найден неподходящий: '{recipe.get('name', 'Unknown')}' - время {cooking_time} минут")
     
     if excluded_recipes:
         print("DEBUG: Исключенные рецепты (превышают время):")
@@ -308,11 +317,42 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     selected_recipes = random.sample(available_recipes, 3)
     
+    # Дополнительная проверка: убеждаемся, что все выбранные рецепты соответствуют фильтру
+    if max_minutes:
+        filtered_selected_recipes = []
+        for recipe in selected_recipes:
+            cooking_time = recipe.get('cooking_time', 0)
+            if cooking_time > 0 and cooking_time <= max_minutes:
+                filtered_selected_recipes.append(recipe)
+            else:
+                print(f"DEBUG: Рецепт '{recipe.get('name', 'Unknown')}' не прошел финальную проверку фильтра (время: {cooking_time} минут)")
+        
+        # Если после проверки осталось меньше 3 рецептов, выбираем заново
+        if len(filtered_selected_recipes) < 3:
+            print(f"DEBUG: После финальной проверки осталось {len(filtered_selected_recipes)} рецептов, выбираем заново")
+            # Исключаем неподходящие рецепты из доступных
+            available_recipes = [r for r in available_recipes if r.get('cooking_time', 0) > 0 and r.get('cooking_time', 0) <= max_minutes]
+            if len(available_recipes) >= 3:
+                selected_recipes = random.sample(available_recipes, 3)
+                print(f"DEBUG: Выбрано заново: {len(selected_recipes)} рецептов")
+            else:
+                # Если все равно недостаточно рецептов
+                await query.edit_message_text(
+                    text=f"❌ Недостаточно рецептов для показа с фильтром времени готовки (не более {max_minutes} минут).\n\n"
+                         f"Доступно рецептов: {len(available_recipes)}\n"
+                         f"Попробуйте изменить фильтр в настройках или убрать его.",
+                    parse_mode='HTML'
+                )
+                return
+    
     # Отладочная информация о выбранных рецептах
-    print(f"DEBUG: Выбрано рецептов: {len(selected_recipes)}")
+    print(f"DEBUG: Финальный выбор рецептов: {len(selected_recipes)}")
     for i, recipe in enumerate(selected_recipes):
         cooking_time = recipe.get('cooking_time', 0)
         print(f"DEBUG: Рецепт {i+1}: '{recipe.get('name', 'Unknown')}' - время готовки: {cooking_time} минут")
+        # Проверяем, что рецепт соответствует фильтру
+        if max_minutes and cooking_time > max_minutes:
+            print(f"ERROR: Рецепт '{recipe.get('name', 'Unknown')}' превышает лимит времени!")
     
     # Добавляем номер выбранных рецептов в использованные
     for recipe in selected_recipes:
