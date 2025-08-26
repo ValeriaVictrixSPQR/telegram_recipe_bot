@@ -150,6 +150,128 @@ async def set_cooking_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+def get_allergy_catalog():
+    """Возвращает словарь доступных аллергенов и ключевых слов для поиска в ингредиентах."""
+    return {
+        'молочные продукты': [
+            'молоко', 'сливк', 'сливочн', 'творог', 'творож', 'сыр', 'йогурт', 'кефир', 'маскарпон', 'сметан'
+        ],
+        'яйца': [
+            'яйц', 'желток', 'белок', 'перепели'
+        ],
+        'глютен (пшеница)': [
+            'пшен', 'мука', 'вермиш', 'лапша', 'макарон', 'спагетти', 'паста', 'батон', 'хлеб'
+        ],
+        'орехи/арахис': [
+            'орех', 'миндаль', 'грецк', 'фундук', 'кешью', 'арахис', 'арахисовая паста', 'миндальн'
+        ],
+        'рыба/морепродукты': [
+            'рыба', 'лосось', 'семга', 'треска', 'хек', 'тунец', 'форель', 'султанка', 'кревет'
+        ],
+        'соя': [
+            'соя', 'соев'
+        ],
+        'кунжут/тахини': [
+            'кунжут', 'тахин'
+        ],
+        'мёд': [
+            'мёд', 'мед '
+        ]
+    }
+
+def format_allergies_text(selected: list) -> str:
+    return ", ".join(selected) if selected else "не указаны"
+
+async def show_allergies_options(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает опции выбора аллергенов (переключатели)."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    selected = set(user_data['preferences'].get('allergies', []))
+
+    catalog = get_allergy_catalog()
+
+    # Формируем клавиатуру с переключателями
+    keyboard = []
+    for allergy_name in catalog.keys():
+        checked = '✅ ' if allergy_name in selected else ''
+        keyboard.append([InlineKeyboardButton(f"{checked}{allergy_name}", callback_data=f"allergy_toggle_{allergy_name}")])
+
+    keyboard.append([InlineKeyboardButton("🧹 Очистить", callback_data="allergy_clear")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="show_settings")])
+
+    text = (
+        "⚠️ <b>Аллергии</b>\n\n"
+        f"Текущие: {format_allergies_text(list(selected))}\n\n"
+        "Нажимайте, чтобы включить/выключить аллерген."
+    )
+
+    await query.edit_message_text(
+        text=text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML'
+    )
+
+async def toggle_allergy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Переключает аллерген в списке пользователя."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    prefs = user_data['preferences']
+
+    # Имя аллергена идёт после allergy_toggle_
+    allergy_name = query.data[len('allergy_toggle_'):]
+
+    current = set(prefs.get('allergies', []))
+    if allergy_name in current:
+        current.remove(allergy_name)
+    else:
+        current.add(allergy_name)
+    prefs['allergies'] = list(current)
+    save_user_data(user_id, user_data)
+
+    # Обновляем экран выбора аллергий
+    await show_allergies_options(update, context)
+
+async def clear_allergies(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Очищает все выбранные аллергены."""
+    query = update.callback_query
+    await query.answer("Аллергии очищены")
+
+    user_id = query.from_user.id
+    user_data = get_user_data(user_id)
+    user_data['preferences']['allergies'] = []
+    save_user_data(user_id, user_data)
+
+    await show_allergies_options(update, context)
+
+def filter_recipes_by_allergies(recipes, selected_allergies):
+    """Исключает рецепты, содержащие выбранные аллергены в ингредиентах."""
+    if not selected_allergies:
+        return recipes
+
+    catalog = get_allergy_catalog()
+
+    # Собираем ключевые слова по выбранным аллергенам
+    keywords = []
+    for allergy_name in selected_allergies:
+        keywords.extend(catalog.get(allergy_name, []))
+
+    def recipe_is_safe(recipe) -> bool:
+        ingredients_text = (recipe.get('ingredients') or '').lower()
+        # если какое-либо ключевое слово встречается в ингредиентах — рецепт не подходит
+        for kw in keywords:
+            if kw.lower() in ingredients_text:
+                return False
+        return True
+
+    filtered = [r for r in recipes if recipe_is_safe(r)]
+    return filtered
+
 def filter_recipes_by_cooking_time(recipes, max_minutes):
     """Фильтрует рецепты по времени готовки"""
     if not max_minutes:
@@ -274,9 +396,10 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Получаем настройки времени готовки пользователя
+    # Получаем настройки фильтров пользователя
     cooking_time_pref = user_data['preferences']['cooking_time']
     max_minutes = None
+    selected_allergies = user_data['preferences'].get('allergies', [])
     
     if cooking_time_pref:
         # Извлекаем число минут из настройки
@@ -286,31 +409,36 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             max_minutes = int(match.group(1))
             print(f"DEBUG: Установлен фильтр времени готовки: не более {max_minutes} минут")
     
-    # Сначала применяем фильтр по времени готовки ко ВСЕМ рецептам
+    # 1) Фильтр по времени готовки ко ВСЕМ рецептам
     if max_minutes:
-        all_filtered_recipes = filter_recipes_by_cooking_time(RECIPES["recipes"], max_minutes)
-        print(f"DEBUG: Всего рецептов с фильтром {max_minutes} минут: {len(all_filtered_recipes)}")
-        
-        # Из отфильтрованных выбираем те, которые не были показаны
-        available_recipes = [r for r in all_filtered_recipes if r["number"] not in USED_RECIPE_IDS]
-        print(f"DEBUG: Доступно рецептов (не показаны + фильтр): {len(available_recipes)}")
+        base_filtered = filter_recipes_by_cooking_time(RECIPES["recipes"], max_minutes)
+        print(f"DEBUG: Всего рецептов с фильтром {max_minutes} минут: {len(base_filtered)}")
     else:
-        # Без фильтра - все рецепты, которые не были показаны
-        available_recipes = [r for r in RECIPES["recipes"] if r["number"] not in USED_RECIPE_IDS]
-        print(f"DEBUG: Доступно рецептов (без фильтра): {len(available_recipes)}")
+        base_filtered = list(RECIPES["recipes"])  # копия списка
+
+    # 2) Фильтр по аллергенам
+    if selected_allergies:
+        before = len(base_filtered)
+        base_filtered = filter_recipes_by_allergies(base_filtered, selected_allergies)
+        print(f"DEBUG: Аллергии выбраны: {selected_allergies}. До: {before}, после: {len(base_filtered)}")
+
+    # 3) Убираем уже показанные рецепты
+    available_recipes = [r for r in base_filtered if r["number"] not in USED_RECIPE_IDS]
+    print(f"DEBUG: Доступно рецептов после всех фильтров: {len(available_recipes)}")
     
     # Если все рецепты были показаны, сбрасываем счетчик и применяем фильтр заново
     if len(available_recipes) < 3:
         print(f"DEBUG: Недостаточно доступных рецептов ({len(available_recipes)}), сбрасываем счетчик")
         USED_RECIPE_IDS.clear()
         
+        # Применяем те же фильтры заново к полной базе
+        base_filtered = RECIPES["recipes"]
         if max_minutes:
-            # Снова применяем фильтр ко всем рецептам
-            available_recipes = filter_recipes_by_cooking_time(RECIPES["recipes"], max_minutes)
-            print(f"DEBUG: После сброса доступно рецептов с фильтром: {len(available_recipes)}")
-        else:
-            available_recipes = RECIPES["recipes"]
-            print(f"DEBUG: После сброса доступно всех рецептов: {len(available_recipes)}")
+            base_filtered = filter_recipes_by_cooking_time(base_filtered, max_minutes)
+        if selected_allergies:
+            base_filtered = filter_recipes_by_allergies(base_filtered, selected_allergies)
+        available_recipes = base_filtered
+        print(f"DEBUG: После сброса доступно рецептов после фильтров: {len(available_recipes)}")
     
     # Проверяем, что у нас достаточно рецептов
     if len(available_recipes) < 3:
@@ -331,17 +459,20 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Выбираем 3 случайных рецепта
     selected_recipes = random.sample(available_recipes, 3)
     
-    # Финальная проверка: все выбранные рецепты должны соответствовать фильтру
-    if max_minutes:
-        print(f"DEBUG: Финальная проверка фильтра для {max_minutes} минут")
-        for i, recipe in enumerate(selected_recipes):
-            cooking_time = recipe.get('cooking_time', 0)
-            if cooking_time == 0:
-                print(f"ERROR: Рецепт '{recipe.get('name', 'Unknown')}' без указания времени!")
-            elif cooking_time > max_minutes:
-                print(f"ERROR: Рецепт '{recipe.get('name', 'Unknown')}' превышает лимит времени: {cooking_time} > {max_minutes}!")
-            else:
-                print(f"✅ Рецепт '{recipe.get('name', 'Unknown')}' соответствует фильтру: {cooking_time} ≤ {max_minutes}")
+    # Финальная проверка: соответствие всем фильтрам
+    if max_minutes or selected_allergies:
+        print("DEBUG: Финальная проверка активных фильтров")
+        for recipe in selected_recipes:
+            if max_minutes:
+                cooking_time = recipe.get('cooking_time', 0)
+                if cooking_time == 0 or cooking_time > max_minutes:
+                    print(f"ERROR: Несоответствие времени: {recipe.get('name')} {cooking_time} > {max_minutes}")
+            if selected_allergies:
+                ing = (recipe.get('ingredients') or '').lower()
+                for allergy_name, kws in get_allergy_catalog().items():
+                    if allergy_name in selected_allergies:
+                        if any(kw.lower() in ing for kw in kws):
+                            print(f"ERROR: Рецепт содержит аллерген '{allergy_name}': {recipe.get('name')}")
     
     # Добавляем номер выбранных рецептов в использованные
     for recipe in selected_recipes:
@@ -609,6 +740,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_cooking_time_options(update, context)
     elif query.data.startswith("cooking_time_"):
         await set_cooking_time(update, context)
+    elif query.data == "set_allergies":
+        await show_allergies_options(update, context)
+    elif query.data.startswith("allergy_toggle_"):
+        await toggle_allergy(update, context)
+    elif query.data == "allergy_clear":
+        await clear_allergies(update, context)
     # Добавьте другие обработчики по мере необходимости
 
 def main():
