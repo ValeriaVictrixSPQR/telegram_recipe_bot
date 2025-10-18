@@ -108,10 +108,15 @@ async def show_cooking_time_options(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     
+    # Подсчитываем количество рецептов для каждого фильтра
+    recipes_10 = len([r for r in RECIPES["recipes"] if r.get('cooking_time', 0) <= 10])
+    recipes_20 = len([r for r in RECIPES["recipes"] if r.get('cooking_time', 0) <= 20])
+    recipes_30 = len([r for r in RECIPES["recipes"] if r.get('cooking_time', 0) <= 30])
+    
     keyboard = [
-        [InlineKeyboardButton("⏰ Не более 10 минут", callback_data="cooking_time_10")],
-        [InlineKeyboardButton("⏰ Не более 20 минут", callback_data="cooking_time_20")],
-        [InlineKeyboardButton("⏰ Не более 30 минут", callback_data="cooking_time_30")],
+        [InlineKeyboardButton(f"⏰ Не более 10 минут ({recipes_10} рецептов)", callback_data="cooking_time_10")],
+        [InlineKeyboardButton(f"⏰ Не более 20 минут ({recipes_20} рецептов)", callback_data="cooking_time_20")],
+        [InlineKeyboardButton(f"⏰ Не более 30 минут ({recipes_30} рецептов)", callback_data="cooking_time_30")],
         [InlineKeyboardButton("❌ Убрать фильтр", callback_data="cooking_time_none")],
         [InlineKeyboardButton("🔙 Назад", callback_data="show_settings")]
     ]
@@ -141,7 +146,10 @@ async def set_cooking_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         time_minutes = int(time_value)
         user_data['preferences']['cooking_time'] = f"Не более {time_minutes} минут"
-        await query.answer(f"✅ Установлено время готовки: не более {time_minutes} минут!")
+        
+        # Подсчитываем количество доступных рецептов
+        available_recipes = len([r for r in RECIPES["recipes"] if r.get('cooking_time', 0) <= time_minutes])
+        await query.answer(f"✅ Установлено время готовки: не более {time_minutes} минут!\nДоступно рецептов: {available_recipes}")
     
     save_user_data(user_id, user_data)
     
@@ -443,10 +451,26 @@ async def show_recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, что у нас достаточно рецептов
     if len(available_recipes) < 3:
         if max_minutes:
+            # Показываем информацию о фильтре и предлагаем альтернативы
+            total_with_filter = len([r for r in RECIPES["recipes"] if r.get('cooking_time', 0) <= max_minutes])
+            message = f"❌ <b>Недостаточно рецептов с фильтром времени готовки</b>\n\n"
+            message += f"⏰ Фильтр: не более {max_minutes} минут\n"
+            message += f"📊 Найдено рецептов: {len(available_recipes)}\n"
+            message += f"📊 Всего рецептов с этим фильтром: {total_with_filter}\n\n"
+            message += f"💡 <b>Рекомендации:</b>\n"
+            message += f"• Увеличьте время готовки в настройках\n"
+            message += f"• Уберите фильтр времени готовки\n"
+            message += f"• Проверьте фильтры аллергенов"
+            
+            keyboard = [
+                [InlineKeyboardButton("⚙️ Настройки", callback_data="show_settings")],
+                [InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             await query.edit_message_text(
-                text=f"❌ Недостаточно рецептов для показа с фильтром времени готовки (не более {max_minutes} минут).\n\n"
-                     f"Найдено рецептов: {len(available_recipes)}\n"
-                     f"Попробуйте изменить фильтр в настройках или убрать его.",
+                text=message,
+                reply_markup=reply_markup,
                 parse_mode='HTML'
             )
         else:
